@@ -67,11 +67,18 @@ router.get('/summary', auth, async (req, res) => {
         // Base query for cattle filtering
         const baseQuery = cattleId ? { cattle: mongoose.Types.ObjectId(cattleId) } : {};
 
-        // Get all expenses (including farm setup)
+        // Fetch all cattle with their saleDate and actualSalePrice
+        const allCattleDocs = await Cattle.find({}, '_id saleDate actualSalePrice');
+        const cattleSaleMap = allCattleDocs.reduce((map, c) => {
+            map[c._id.toString()] = {
+                saleDate: c.saleDate,
+                actualSalePrice: c.actualSalePrice
+            };
+            return map;
+        }, {});
+
+        // Get all expenses (including farm setup), but exclude post-sale expenses for sold cattle
         const allExpenses = await Expense.aggregate([
-            {
-                $match: baseQuery
-            },
             {
                 $lookup: {
                     from: 'categories',
@@ -81,6 +88,37 @@ router.get('/summary', auth, async (req, res) => {
                 }
             },
             { $unwind: '$categoryDetails' },
+            {
+                $match: baseQuery
+            },
+            {
+                $addFields: {
+                    cattleId: { $arrayElemAt: ['$cattle', 0] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'cattles',
+                    localField: 'cattleId',
+                    foreignField: '_id',
+                    as: 'cattleDoc'
+                }
+            },
+            {
+                $addFields: {
+                    cattleSaleDate: { $arrayElemAt: ['$cattleDoc.saleDate', 0] },
+                    cattleActualSalePrice: { $arrayElemAt: ['$cattleDoc.actualSalePrice', 0] }
+                }
+            },
+            {
+                $match: {
+                    $or: [
+                        { cattleSaleDate: null },
+                        { cattleActualSalePrice: { $lte: 0 } },
+                        { $expr: { $lte: ['$date', '$cattleSaleDate'] } }
+                    ]
+                }
+            },
             {
                 $group: {
                     _id: null,
@@ -89,11 +127,8 @@ router.get('/summary', auth, async (req, res) => {
             }
         ]);
 
-        // Get farm setup expenses
+        // Get farm setup expenses (exclude post-sale expenses for sold cattle)
         const farmSetupExpenses = await Expense.aggregate([
-            {
-                $match: baseQuery
-            },
             {
                 $lookup: {
                     from: 'categories',
@@ -104,8 +139,35 @@ router.get('/summary', auth, async (req, res) => {
             },
             { $unwind: '$categoryDetails' },
             {
+                $match: baseQuery
+            },
+            {
+                $addFields: {
+                    cattleId: { $arrayElemAt: ['$cattle', 0] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'cattles',
+                    localField: 'cattleId',
+                    foreignField: '_id',
+                    as: 'cattleDoc'
+                }
+            },
+            {
+                $addFields: {
+                    cattleSaleDate: { $arrayElemAt: ['$cattleDoc.saleDate', 0] },
+                    cattleActualSalePrice: { $arrayElemAt: ['$cattleDoc.actualSalePrice', 0] }
+                }
+            },
+            {
                 $match: {
-                    'categoryDetails.name': 'Farm Setup'
+                    'categoryDetails.name': 'Farm Setup',
+                    $or: [
+                        { cattleSaleDate: null },
+                        { cattleActualSalePrice: { $lte: 0 } },
+                        { $expr: { $lte: ['$date', '$cattleSaleDate'] } }
+                    ]
                 }
             },
             {
@@ -116,11 +178,8 @@ router.get('/summary', auth, async (req, res) => {
             }
         ]);
 
-        // Get operational expenses (excluding farm setup) grouped by month
+        // Get operational expenses (excluding farm setup) grouped by month (exclude post-sale expenses for sold cattle)
         const operationalExpenses = await Expense.aggregate([
-            {
-                $match: baseQuery
-            },
             {
                 $lookup: {
                     from: 'categories',
@@ -131,8 +190,35 @@ router.get('/summary', auth, async (req, res) => {
             },
             { $unwind: '$categoryDetails' },
             {
+                $match: baseQuery
+            },
+            {
+                $addFields: {
+                    cattleId: { $arrayElemAt: ['$cattle', 0] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'cattles',
+                    localField: 'cattleId',
+                    foreignField: '_id',
+                    as: 'cattleDoc'
+                }
+            },
+            {
+                $addFields: {
+                    cattleSaleDate: { $arrayElemAt: ['$cattleDoc.saleDate', 0] },
+                    cattleActualSalePrice: { $arrayElemAt: ['$cattleDoc.actualSalePrice', 0] }
+                }
+            },
+            {
                 $match: {
-                    'categoryDetails.name': { $ne: 'Farm Setup' }
+                    'categoryDetails.name': { $ne: 'Farm Setup' },
+                    $or: [
+                        { cattleSaleDate: null },
+                        { cattleActualSalePrice: { $lte: 0 } },
+                        { $expr: { $lte: ['$date', '$cattleSaleDate'] } }
+                    ]
                 }
             },
             {
@@ -263,7 +349,11 @@ router.post('/', [
     auth,
     body('cattle').optional({ nullable: true }).custom(value => {
         if (value === '' || value === null || value === undefined) return true;
-        return value === 'all' || mongoose.Types.ObjectId.isValid(value);
+        if (value === 'all') return true;
+        if (Array.isArray(value)) {
+            return value.every(id => mongoose.Types.ObjectId.isValid(id));
+        }
+        return mongoose.Types.ObjectId.isValid(value);
     }),
     body('category').isMongoId(),
     body('amount').isNumeric().isFloat({ min: 0 }),
@@ -311,6 +401,8 @@ router.post('/', [
 
         // For no cattle or specific cattle case
         let cattleId = [];  // Initialize as empty array instead of null
+        let isSharedExpense = false;
+        let totalCattleCount = 0;
         if (cattle && cattle !== '') {
             if (cattle === 'all') {
                 // Get all active cattle (exclude sold cattle with saleDate before expense date)
@@ -325,6 +417,8 @@ router.post('/', [
                     return res.status(400).json({ message: 'No cattle found to assign expense to' });
                 }
                 cattleId = allCattle.map(c => c._id);
+                isSharedExpense = true;
+                totalCattleCount = allCattle.length;
                 
                 const expense = new Expense({
                     cattle: cattleId,
@@ -336,20 +430,29 @@ router.post('/', [
                     receipt,
                     quantity: quantity || undefined,
                     unit: unit || undefined,
-                    isSharedExpense: true,
-                    totalCattleCount: allCattle.length,
+                    isSharedExpense: isSharedExpense,
+                    totalCattleCount: totalCattleCount,
                     contributor
                 });
 
                 await expense.save();
                 return res.status(201).json(expense);
+            } else if (Array.isArray(cattle)) {
+                // Validate all cattle IDs
+                const foundCattle = await Cattle.find({ _id: { $in: cattle } });
+                if (foundCattle.length !== cattle.length) {
+                    return res.status(404).json({ message: 'One or more selected cattle not found' });
+                }
+                cattleId = cattle;
+                isSharedExpense = true;
+                totalCattleCount = cattle.length;
             } else {
-                // Verify single cattle exists if specified
+                // Single cattle
                 const cattleExists = await Cattle.findById(cattle);
                 if (!cattleExists) {
                     return res.status(404).json({ message: 'Cattle not found' });
                 }
-                cattleId = [cattle];  // Wrap single cattle ID in array
+                cattleId = [cattle];
             }
         }
 
@@ -363,8 +466,8 @@ router.post('/', [
             receipt,
             quantity: quantity || undefined,
             unit: unit || undefined,
-            isSharedExpense: false,
-            totalCattleCount: cattleId.length || undefined,
+            isSharedExpense: isSharedExpense || false,
+            totalCattleCount: totalCattleCount || cattleId.length || undefined,
             contributor
         });
 
@@ -380,7 +483,11 @@ router.put('/:id', [
     auth,
     body('cattle').optional({ nullable: true }).custom(value => {
         if (value === '' || value === null || value === undefined) return true;
-        return value === 'all' || mongoose.Types.ObjectId.isValid(value);
+        if (value === 'all') return true;
+        if (Array.isArray(value)) {
+            return value.every(id => mongoose.Types.ObjectId.isValid(id));
+        }
+        return mongoose.Types.ObjectId.isValid(value);
     }),
     body('category').optional().isMongoId(),
     body('amount').optional().isNumeric().isFloat({ min: 0 }),

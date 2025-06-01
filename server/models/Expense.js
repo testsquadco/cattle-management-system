@@ -67,7 +67,8 @@ const expenseSchema = new mongoose.Schema({
 // Add virtual field for per-cattle amount
 expenseSchema.virtual('perCattleAmount').get(function() {
     if (this.isSharedExpense) {
-        return this.amount / this.totalCattleCount;
+        // Use precise math for even split
+        return parseFloat((this.amount / this.totalCattleCount).toFixed(2));
     }
     return this.amount;
 });

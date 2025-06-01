@@ -58,7 +58,14 @@ router.get('/:id', auth, async (req, res) => {
         // Get total number of cattle
         const totalCattleCount = await Cattle.countDocuments();
 
-        // Calculate total expenses excluding Farm Setup and divide by total cattle
+        // Calculate total expenses excluding Farm Setup and post-sale expenses for this cattle
+        const expenseMatch = {
+            cattle: new mongoose.Types.ObjectId(req.params.id),
+            'categoryDetails.name': { $ne: 'Farm Setup' }
+        };
+        if (cattle.saleDate && cattle.actualSalePrice > 0) {
+            expenseMatch.date = { $lte: cattle.saleDate };
+        }
         const expenseStats = await Expense.aggregate([
             {
                 $lookup: {
@@ -69,32 +76,32 @@ router.get('/:id', auth, async (req, res) => {
                 }
             },
             { $unwind: '$categoryDetails' },
+            { $match: expenseMatch },
             {
-                $match: {
-                    'categoryDetails.name': { $ne: 'Farm Setup' }
+                $project: {
+                    effectiveAmount: {
+                        $cond: [
+                            '$isSharedExpense',
+                            { $divide: ['$amount', '$totalCattleCount'] },
+                            '$amount'
+                        ]
+                    }
                 }
             },
             {
                 $group: {
                     _id: null,
-                    totalExpenses: { $sum: '$amount' }
+                    totalExpenses: { $sum: '$effectiveAmount' }
                 }
             }
         ]);
-
-        // Calculate per cattle expense
         const totalExpenses = expenseStats.length > 0 ? expenseStats[0].totalExpenses : 0;
-        const perCattleExpense = totalCattleCount > 0 ? totalExpenses / totalCattleCount : 0;
-
-        // Calculate initial cost for this specific cattle
         const initialCost = (cattle.purchasePrice || 0) + (cattle.transportationCost || 0);
-
-        // Calculate total investment (initial cost + per cattle expense share)
-        const totalInvestment = initialCost + perCattleExpense;
+        const totalInvestment = initialCost + totalExpenses;
 
         // Add calculated values to cattle object
         const cattleWithStats = cattle.toObject();
-        cattleWithStats.totalExpenses = perCattleExpense;
+        cattleWithStats.totalExpenses = totalExpenses;
         cattleWithStats.totalInvestment = totalInvestment;
         cattleWithStats.initialCost = initialCost;
 
@@ -103,7 +110,7 @@ router.get('/:id', auth, async (req, res) => {
             purchasePrice: cattle.purchasePrice,
             transportationCost: cattle.transportationCost,
             initialCost,
-            totalExpenses: perCattleExpense,
+            totalExpenses,
             totalInvestment,
             totalCattleCount
         });
@@ -397,8 +404,44 @@ router.put('/:id', [
             updateData.actualSalePrice > 0 &&
             updateData.saleDate
         ) {
-            // Always use the latest totalExpenses from the DB
-            const totalExpenses = currentCattle.totalExpenses || 0;
+            // Recalculate totalExpenses using the same aggregation as GET
+            const expenseMatch = {
+                cattle: new mongoose.Types.ObjectId(req.params.id),
+                'categoryDetails.name': { $ne: 'Farm Setup' }
+            };
+            if (updateData.saleDate && updateData.actualSalePrice > 0) {
+                expenseMatch.date = { $lte: updateData.saleDate };
+            }
+            const expenseStats = await Expense.aggregate([
+                {
+                    $lookup: {
+                        from: 'categories',
+                        localField: 'category',
+                        foreignField: '_id',
+                        as: 'categoryDetails'
+                    }
+                },
+                { $unwind: '$categoryDetails' },
+                { $match: expenseMatch },
+                {
+                    $project: {
+                        effectiveAmount: {
+                            $cond: [
+                                '$isSharedExpense',
+                                { $divide: ['$amount', '$totalCattleCount'] },
+                                '$amount'
+                            ]
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalExpenses: { $sum: '$effectiveAmount' }
+                    }
+                }
+            ]);
+            const totalExpenses = expenseStats.length > 0 ? expenseStats[0].totalExpenses : 0;
             const purchasePrice = updateData.purchasePrice !== undefined ? updateData.purchasePrice : currentCattle.purchasePrice || 0;
             const transportationCost = updateData.transportationCost !== undefined ? updateData.transportationCost : currentCattle.transportationCost || 0;
             const totalInvestment = purchasePrice + transportationCost + totalExpenses;
@@ -464,7 +507,14 @@ router.get('/:id/expenses', auth, async (req, res) => {
         // Get initial cost (purchase price + transportation)
         const initialCost = cattle.purchasePrice + (cattle.transportationCost || 0);
 
-        // Get all expenses for this cattle, excluding Farm Setup category
+        // Get all expenses for this cattle, excluding Farm Setup category and post-sale expenses
+        const expenseMatch = {
+            cattle: new mongoose.Types.ObjectId(req.params.id),
+            'categoryDetails.name': { $ne: 'Farm Setup' }
+        };
+        if (cattle.saleDate && cattle.actualSalePrice > 0) {
+            expenseMatch.date = { $lte: cattle.saleDate };
+        }
         const expenses = await Expense.aggregate([
             {
                 $lookup: {
@@ -475,12 +525,7 @@ router.get('/:id/expenses', auth, async (req, res) => {
                 }
             },
             { $unwind: '$categoryDetails' },
-            {
-                $match: {
-                    cattle: mongoose.Types.ObjectId(req.params.id),
-                    'categoryDetails.name': { $ne: 'Farm Setup' }
-                }
-            },
+            { $match: expenseMatch },
             {
                 $project: {
                     amount: 1,
@@ -506,6 +551,9 @@ router.get('/:id/expenses', auth, async (req, res) => {
 
         // Calculate total recurring expenses
         const totalRecurringExpenses = expenses.reduce((sum, expense) => sum + expense.effectiveAmount, 0);
+        // Safeguard: log the sum of all effectiveAmounts for this cattle
+        const totalDistributed = expenses.reduce((sum, expense) => sum + (expense.isSharedExpense ? expense.effectiveAmount : 0), 0);
+        console.log(`[CATTLE ${cattle._id}] Total distributed shared:`, totalDistributed, 'Total recurring:', totalRecurringExpenses);
 
         // Calculate total cost (initial + recurring)
         const totalCost = initialCost + totalRecurringExpenses;
