@@ -172,6 +172,16 @@ const cattleSchema = new mongoose.Schema({
         notes: {
             type: String
         }
+    },
+    season: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Season',
+        required: true
+    },
+    carryForwardFromSeason: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Season',
+        default: null
     }
 }, {
     timestamps: true,

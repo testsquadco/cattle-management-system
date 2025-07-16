@@ -57,6 +57,11 @@ const expenseSchema = new mongoose.Schema({
     },
     notes: {
         type: String
+    },
+    season: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Season',
+        required: true
     }
 }, {
     timestamps: true,

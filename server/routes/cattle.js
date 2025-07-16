@@ -13,7 +13,12 @@ const fs = require('fs');
 // Get all cattle
 router.get('/', auth, async (req, res) => {
     try {
-        const cattle = await Cattle.find().sort({ tag: 1 });
+        const { season } = req.query;
+        const query = {};
+        if (season) {
+            query.season = season;
+        }
+        const cattle = await Cattle.find(query).sort({ tag: 1 });
         
         // Get latest weights for all cattle
         const weights = await Promise.all(
@@ -158,8 +163,13 @@ router.post('/', [
         .isFloat({ min: 0 }).withMessage('Expected sale price must be greater than 0'),
     body('notes')
         .optional()
-        .trim()
+        .trim(),
+    body('season')
+        .notEmpty().withMessage('Season is required')
+        .isMongoId().withMessage('Season must be a valid ID')
 ], async (req, res) => {
+    // Log the received season for debugging
+    console.log('[CATTLE POST] Received season:', req.body.season);
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -168,6 +178,18 @@ router.post('/', [
                 fs.unlinkSync(req.file.path);
             }
             return res.status(400).json({ errors: errors.array() });
+        }
+
+        // Validate season exists and is not closed
+        const Season = require('../models/Season');
+        const season = await Season.findById(req.body.season);
+        if (!season) {
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(400).json({ message: 'Season not found' });
+        }
+        if (season.isClosed) {
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(400).json({ message: 'Cannot add cattle to a closed season' });
         }
 
         // Check for duplicate tag again (race condition protection)
@@ -197,6 +219,38 @@ router.post('/', [
         res.status(500).json({ message: 'Error creating cattle', error: error.message });
     }
 });
+
+// Helper to sanitize custodyDetails fields
+function sanitizeCattlePayload(body) {
+    // Parse custodyDetails if it's a string
+    if (typeof body.custodyDetails === 'string') {
+        try {
+            body.custodyDetails = JSON.parse(body.custodyDetails);
+        } catch (e) {
+            body.custodyDetails = {};
+        }
+    }
+    // Sanitize endDate and startDate
+    if (body.custodyDetails && typeof body.custodyDetails === 'object') {
+        // endDate
+        if (
+            body.custodyDetails.endDate === 'null' ||
+            body.custodyDetails.endDate === '' ||
+            typeof body.custodyDetails.endDate === 'undefined'
+        ) {
+            body.custodyDetails.endDate = null;
+        }
+        // startDate
+        if (
+            body.custodyDetails.startDate === 'null' ||
+            body.custodyDetails.startDate === '' ||
+            typeof body.custodyDetails.startDate === 'undefined'
+        ) {
+            body.custodyDetails.startDate = null;
+        }
+    }
+    return body;
+}
 
 // Update cattle
 router.put('/:id', [
@@ -232,148 +286,6 @@ router.put('/:id', [
     body('purpose').optional().isIn(['For Sale', 'Breeding']).withMessage('Purpose must be either For Sale or Breeding')
 ], async (req, res) => {
     try {
-        // Log initial request data with detailed type information
-        console.log('=== INITIAL REQUEST DATA ===');
-        console.log('Raw body:', JSON.stringify(req.body, null, 2));
-        console.log('File:', req.file ? {
-            filename: req.file.filename,
-            path: req.file.path,
-            size: req.file.size
-        } : null);
-
-        // Helper function to log detailed field information
-        const logFieldDetails = (data, prefix = '') => {
-            console.log(`\n=== ${prefix}FIELD DETAILS ===`);
-            Object.entries(data).forEach(([key, value]) => {
-                console.log(`\nField: ${key}`);
-                console.log('Type:', typeof value);
-                console.log('Value:', value);
-                console.log('Is Object:', value && typeof value === 'object');
-                console.log('Is Array:', Array.isArray(value));
-                console.log('Stringified:', JSON.stringify(value));
-                if (value && typeof value === 'object') {
-                    console.log('Object keys:', Object.keys(value));
-                }
-            });
-        };
-
-        // First, handle custodyDetails before any other parsing
-        if (req.body.custodyDetails) {
-            try {
-                // If it's a string "[object Object]", try to get the actual object from the request
-                if (req.body.custodyDetails === '[object Object]') {
-                    const custodyFields = [
-                        'ownerName',
-                        'ownerContact',
-                        'monthlyFee',
-                        'startDate',
-                        'endDate',
-                        'notes'
-                    ];
-                    
-                    const parsedCustodyDetails = {};
-                    let hasValidFields = false;
-
-                    custodyFields.forEach(field => {
-                        const fieldValue = req.body[`custodyDetails.${field}`];
-                        if (fieldValue !== undefined && fieldValue !== '') {
-                            hasValidFields = true;
-                            if (field === 'monthlyFee') {
-                                parsedCustodyDetails[field] = parseFloat(fieldValue);
-                            } else if (field === 'startDate' || field === 'endDate') {
-                                parsedCustodyDetails[field] = new Date(fieldValue);
-                            } else {
-                                parsedCustodyDetails[field] = fieldValue;
-                            }
-                        }
-                    });
-
-                    // Only set custodyDetails if we have valid fields
-                    if (hasValidFields) {
-                        req.body.custodyDetails = parsedCustodyDetails;
-                    } else {
-                        delete req.body.custodyDetails;
-                    }
-                } else if (typeof req.body.custodyDetails === 'string') {
-                    try {
-                        req.body.custodyDetails = JSON.parse(req.body.custodyDetails);
-                    } catch (e) {
-                        delete req.body.custodyDetails;
-                    }
-                }
-            } catch (error) {
-                console.error('Error parsing custodyDetails:', error);
-                delete req.body.custodyDetails;
-            }
-        }
-
-        // Parse and sanitize numeric fields
-        const numericFields = [
-            'weight',
-            'purchasePrice',
-            'transportationCost',
-            'expectedSalePrice',
-            'actualSalePrice',
-            'profitLoss',
-            'numberOfOffspring',
-            'totalExpenses',
-            'dailyFeedKg',
-            'expensePerOffspring',
-            'currentWeight'
-        ];
-
-        numericFields.forEach(field => {
-            if (req.body[field] !== undefined && req.body[field] !== '') {
-                const parsedValue = parseFloat(req.body[field]);
-                req.body[field] = isNaN(parsedValue) ? null : parsedValue;
-            } else {
-                req.body[field] = null;
-            }
-        });
-
-        // Parse date fields
-        const dateFields = [
-            'purchaseDate',
-            'saleDate',
-            'createdAt',
-            'updatedAt'
-        ];
-
-        dateFields.forEach(field => {
-            if (req.body[field] && req.body[field] !== 'null') {
-                const parsedDate = new Date(req.body[field]);
-                req.body[field] = isNaN(parsedDate.getTime()) ? null : parsedDate;
-            } else {
-                req.body[field] = null;
-            }
-        });
-
-        // Remove empty string values and system fields from request body
-        const systemFields = ['_id', '__v', 'id', 'createdAt', 'updatedAt'];
-        Object.keys(req.body).forEach(key => {
-            if (req.body[key] === '' || systemFields.includes(key)) {
-                delete req.body[key];
-            }
-        });
-
-        // Log parsed data before validation
-        console.log('\n=== PARSED DATA BEFORE VALIDATION ===');
-        logFieldDetails(req.body, 'PRE-VALIDATION');
-
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            console.error('\n=== VALIDATION ERRORS ===');
-            console.error(errors.array());
-            // If there's an uploaded file but validation failed, delete it
-            if (req.file) {
-                fs.unlinkSync(req.file.path);
-            }
-            return res.status(400).json({ 
-                message: 'Validation failed',
-                errors: errors.array() 
-            });
-        }
-
         // Get the current cattle to check for existing image
         const currentCattle = await Cattle.findById(req.params.id);
         if (!currentCattle) {
@@ -384,6 +296,27 @@ router.put('/:id', [
             return res.status(404).json({ message: 'Cattle not found' });
         }
 
+        // If changing from Sold to Owned/Custody, clear sale-related fields
+        if (currentCattle.custodyType === 'Sold' && req.body.custodyType && req.body.custodyType !== 'Sold') {
+            // Clear all sale-related fields
+            req.body.actualSalePrice = 0;
+            req.body.saleDate = null;
+            req.body.profitLoss = 0;
+            req.body.expectedSalePrice = 0;  // Also clear expected sale price
+            
+            // Clear custody details if changing to Owned
+            if (req.body.custodyType === 'Owned') {
+                req.body.custodyDetails = {
+                    ownerName: '',
+                    ownerContact: '',
+                    monthlyFee: null,
+                    startDate: null,
+                    endDate: null,
+                    notes: ''
+                };
+            }
+        }
+
         // If new image is uploaded, delete the old one
         if (req.file && currentCattle.image) {
             const oldImagePath = path.join('server/public/uploads/cattle', currentCattle.image);
@@ -392,71 +325,32 @@ router.put('/:id', [
             }
         }
 
-        // Update cattle with new image filename if uploaded
-        const updateData = {
-            ...req.body,
-            image: req.file ? req.file.filename : currentCattle.image
-        };
-
-        // Calculate profitLoss if actualSalePrice and saleDate are present
-        if (
-            updateData.purpose === 'For Sale' &&
-            updateData.actualSalePrice > 0 &&
-            updateData.saleDate
-        ) {
-            // Recalculate totalExpenses using the same aggregation as GET
-            const expenseMatch = {
-                cattle: new mongoose.Types.ObjectId(req.params.id),
-                'categoryDetails.name': { $ne: 'Farm Setup' }
-            };
-            if (updateData.saleDate && updateData.actualSalePrice > 0) {
-                expenseMatch.date = { $lte: updateData.saleDate };
-            }
-            const expenseStats = await Expense.aggregate([
-                {
-                    $lookup: {
-                        from: 'categories',
-                        localField: 'category',
-                        foreignField: '_id',
-                        as: 'categoryDetails'
-                    }
-                },
-                { $unwind: '$categoryDetails' },
-                { $match: expenseMatch },
-                {
-                    $project: {
-                        effectiveAmount: {
-                            $cond: [
-                                '$isSharedExpense',
-                                { $divide: ['$amount', '$totalCattleCount'] },
-                                '$amount'
-                            ]
-                        }
-                    }
-                },
-                {
-                    $group: {
-                        _id: null,
-                        totalExpenses: { $sum: '$effectiveAmount' }
-                    }
-                }
-            ]);
-            const totalExpenses = expenseStats.length > 0 ? expenseStats[0].totalExpenses : 0;
-            const purchasePrice = updateData.purchasePrice !== undefined ? updateData.purchasePrice : currentCattle.purchasePrice || 0;
-            const transportationCost = updateData.transportationCost !== undefined ? updateData.transportationCost : currentCattle.transportationCost || 0;
-            const totalInvestment = purchasePrice + transportationCost + totalExpenses;
-            updateData.profitLoss = updateData.actualSalePrice - totalInvestment;
+        // Fix: Convert string 'null' to actual null for carryForwardFromSeason
+        if (req.body.carryForwardFromSeason === 'null') {
+            req.body.carryForwardFromSeason = null;
+        }
+        // Fix: Convert string 'null' to null for custodyDetails.monthlyFee
+        if (req.body.custodyDetails && req.body.custodyDetails.monthlyFee === 'null') {
+            req.body.custodyDetails.monthlyFee = null;
         }
 
-        // Log final update data
-        console.log('\n=== FINAL UPDATE DATA ===');
-        logFieldDetails(updateData, 'FINAL');
+        // Sanitize payload before updating
+        sanitizeCattlePayload(req.body);
 
-        const cattle = await Cattle.findByIdAndUpdate(
-            req.params.id,
-            updateData,
+        // Log sanitized nested fields
+        console.log('custodyDetails.endDate:', req.body.custodyDetails && req.body.custodyDetails.endDate);
+        console.log('custodyDetails.startDate:', req.body.custodyDetails && req.body.custodyDetails.startDate);
+
+        // Use findOneAndUpdate instead of findByIdAndUpdate to ensure atomic update
+        const cattle = await Cattle.findOneAndUpdate(
+            { _id: req.params.id },
+            { $set: req.body },
             { new: true, runValidators: true }
         );
+
+        if (!cattle) {
+            return res.status(404).json({ message: 'Cattle not found' });
+        }
 
         res.json(cattle);
     } catch (error) {
