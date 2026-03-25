@@ -40,7 +40,6 @@ import {
 } from '@mui/icons-material';
 import { useDispatch } from 'react-redux';
 import { logout } from '../store/slices/authSlice';
-import SeasonBanner from '../components/SeasonBanner';
 
 const drawerWidth = 240;
 
@@ -101,7 +100,6 @@ const MainLayout = ({ children }) => {
     },
     { text: 'Profit & Loss', icon: <AccountBalanceIcon />, path: '/profit-loss' },
     { text: 'Reports', icon: <ReportsIcon />, path: '/reports' },
-    ...(isAuthenticated ? [{ text: 'Season Management', icon: <SettingsIcon />, path: '/season-management' }] : []),
   ];
 
   const drawer = (
@@ -201,7 +199,6 @@ const MainLayout = ({ children }) => {
             zIndex: 2000,
           }}
         >
-          <SeasonBanner />
           <Toolbar>
             <IconButton
               color="inherit"

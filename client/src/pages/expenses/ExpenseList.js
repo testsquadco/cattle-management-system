@@ -70,7 +70,6 @@ const ExpenseList = () => {
   const { expenses, loading, error } = useSelector((state) => state.expense);
   const { categories } = useSelector((state) => state.category);
   const { cattle } = useSelector((state) => state.cattle);
-  const { seasons, loading: seasonsLoading } = useSelector((state) => state.season);
   
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -83,22 +82,11 @@ const ExpenseList = () => {
   });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const selectedSeason = React.useMemo(() => {
-    if (!seasons || seasons.length === 0) return null;
-    const active = seasons.find(s => !s.isClosed);
-    if (active) return active;
-    return seasons[0];
-  }, [seasons]);
-
   useEffect(() => {
-    if (selectedSeason && selectedSeason._id) {
-      dispatch(fetchExpenses({ season: selectedSeason._id }));
-    } else {
-      dispatch(fetchExpenses());
-    }
+    dispatch(fetchExpenses());
     dispatch(fetchCategories());
     dispatch(fetchCattle());
-  }, [dispatch, selectedSeason]);
+  }, [dispatch]);
 
   const handleAdd = () => {
     setSelectedExpense(null);
@@ -279,35 +267,10 @@ const ExpenseList = () => {
     },
   ];
 
-  const getAddButtonProps = () => {
-    if (!selectedSeason) {
-      return {
-        disabled: true,
-        tooltip: 'Please select a season first',
-      };
-    }
-
-    if (selectedSeason.status === 'closed') {
-      return {
-        disabled: true,
-        tooltip: 'Cannot add expenses to a closed season',
-      };
-    }
-
-    if (seasonsLoading) {
-      return {
-        disabled: true,
-        tooltip: 'Loading...',
-      };
-    }
-
-    return {
-      disabled: false,
-      tooltip: 'Add new expense',
-    };
+  const addButtonProps = {
+    disabled: false,
+    tooltip: 'Add new expense',
   };
-
-  const addButtonProps = getAddButtonProps();
 
   return (
     <Box sx={{ height: '100%', width: '100%', p: 3 }}>

@@ -13,10 +13,12 @@ const fs = require('fs');
 // Get all cattle
 router.get('/', auth, async (req, res) => {
     try {
-        const { season } = req.query;
+        const { startDate, endDate } = req.query;
         const query = {};
-        if (season) {
-            query.season = season;
+        if (startDate || endDate) {
+            query.purchaseDate = {};
+            if (startDate) query.purchaseDate.$gte = new Date(startDate);
+            if (endDate) query.purchaseDate.$lte = new Date(endDate);
         }
         const cattle = await Cattle.find(query).sort({ tag: 1 });
         
@@ -163,13 +165,8 @@ router.post('/', [
         .isFloat({ min: 0 }).withMessage('Expected sale price must be greater than 0'),
     body('notes')
         .optional()
-        .trim(),
-    body('season')
-        .notEmpty().withMessage('Season is required')
-        .isMongoId().withMessage('Season must be a valid ID')
+        .trim()
 ], async (req, res) => {
-    // Log the received season for debugging
-    console.log('[CATTLE POST] Received season:', req.body.season);
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -178,18 +175,6 @@ router.post('/', [
                 fs.unlinkSync(req.file.path);
             }
             return res.status(400).json({ errors: errors.array() });
-        }
-
-        // Validate season exists and is not closed
-        const Season = require('../models/Season');
-        const season = await Season.findById(req.body.season);
-        if (!season) {
-            if (req.file) fs.unlinkSync(req.file.path);
-            return res.status(400).json({ message: 'Season not found' });
-        }
-        if (season.isClosed) {
-            if (req.file) fs.unlinkSync(req.file.path);
-            return res.status(400).json({ message: 'Cannot add cattle to a closed season' });
         }
 
         // Check for duplicate tag again (race condition protection)
@@ -325,10 +310,6 @@ router.put('/:id', [
             }
         }
 
-        // Fix: Convert string 'null' to actual null for carryForwardFromSeason
-        if (req.body.carryForwardFromSeason === 'null') {
-            req.body.carryForwardFromSeason = null;
-        }
         // Fix: Convert string 'null' to null for custodyDetails.monthlyFee
         if (req.body.custodyDetails && req.body.custodyDetails.monthlyFee === 'null') {
             req.body.custodyDetails.monthlyFee = null;

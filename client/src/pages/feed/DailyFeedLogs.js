@@ -49,13 +49,6 @@ const DailyFeedLogs = () => {
         notes: '',
         recordedBy: 'Eliya'
     });
-    const { seasons, loading: seasonsLoading } = useSelector((state) => state.season);
-    const selectedSeason = React.useMemo(() => {
-        if (!seasons || seasons.length === 0) return null;
-        const active = seasons.find(s => !s.isClosed);
-        if (active) return active;
-        return seasons[0];
-    }, [seasons]);
 
     useEffect(() => {
         fetchLogs();
@@ -156,27 +149,6 @@ const DailyFeedLogs = () => {
     };
 
     const getAddButtonProps = () => {
-        if (seasonsLoading) {
-            return {
-                disabled: true,
-                tooltip: 'Loading...',
-            };
-        }
-
-        if (!selectedSeason) {
-            return {
-                disabled: true,
-                tooltip: 'Please select a season first',
-            };
-        }
-
-        if (selectedSeason.status === 'closed') {
-            return {
-                disabled: true,
-                tooltip: 'Cannot add feed logs to a closed season',
-            };
-        }
-
         return {
             disabled: false,
             tooltip: 'Add new feed log',

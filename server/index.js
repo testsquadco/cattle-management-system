@@ -13,7 +13,6 @@ const custodyPaymentRouter = require('./routes/custodyPayments');
 const kundaRentalsRouter = require('./routes/kundaRentals');
 const kundaPaymentsRouter = require('./routes/kundaPayments');
 const weightsRouter = require('./routes/weights');
-const seasonsRouter = require('./routes/seasons');
 
 // Create Express app
 const app = express();
@@ -63,7 +62,6 @@ app.use('/api/custody-payments', custodyPaymentRouter);
 app.use('/api/kunda-rentals', kundaRentalsRouter);
 app.use('/api/kunda-payments', kundaPaymentsRouter);
 app.use('/api/weights', weightsRouter);
-app.use('/api/seasons', seasonsRouter);
 
 // Root route
 app.get('/', (req, res) => {
@@ -75,8 +73,7 @@ app.get('/', (req, res) => {
             categories: '/api/categories',
             expenses: '/api/expenses',
             weights: '/api/weights',
-            custodyPayments: '/api/custody-payments',
-            seasons: '/api/seasons'
+            custodyPayments: '/api/custody-payments'
         }
     });
 });

@@ -11,7 +11,7 @@ const mongoose = require('mongoose');
 // Get all expenses
 router.get('/', auth, async (req, res) => {
     try {
-        const { startDate, endDate, cattleId, categoryId, season } = req.query;
+        const { startDate, endDate, cattleId, categoryId } = req.query;
         const query = {};
 
         if (startDate && endDate) {
@@ -27,10 +27,6 @@ router.get('/', auth, async (req, res) => {
 
         if (categoryId) {
             query.category = categoryId;
-        }
-
-        if (season) {
-            query.season = season;
         }
 
         const expenses = await Expense.find(query)
@@ -66,12 +62,11 @@ router.get('/', auth, async (req, res) => {
 // Get expense summary
 router.get('/summary', auth, async (req, res) => {
     try {
-        const { startDate, endDate, cattleId, season } = req.query;
+        const { startDate, endDate, cattleId } = req.query;
         
-        // Base query for cattle and season filtering
+        // Base query for cattle filtering
         const baseQuery = {};
-        if (cattleId) baseQuery.cattle = mongoose.Types.ObjectId(cattleId);
-        if (season) baseQuery.season = new mongoose.Types.ObjectId(season);
+        if (cattleId) baseQuery.cattle = new mongoose.Types.ObjectId(cattleId);
 
         // Debug: Log baseQuery
         console.log('[DEBUG] baseQuery:', baseQuery);
@@ -177,7 +172,6 @@ router.get('/summary', auth, async (req, res) => {
             },
             {
                 $match: {
-                    ...(baseQuery.season ? { season: baseQuery.season } : {}),
                     'categoryDetails.name': 'Farm Setup',
                     $or: [
                         { cattleSaleDate: null },
@@ -232,7 +226,6 @@ router.get('/summary', auth, async (req, res) => {
             },
             {
                 $match: {
-                    ...(baseQuery.season ? { season: baseQuery.season } : {}),
                     'categoryDetails.name': { $ne: 'Farm Setup' },
                     $or: [
                         { cattleSaleDate: null },
@@ -391,28 +384,14 @@ router.post('/', [
         const num = parseFloat(value);
         return !isNaN(num) && num >= 0;
     }),
-    body('unit').optional({ nullable: true }),
-    body('season')
-        .notEmpty().withMessage('Season is required')
-        .isMongoId().withMessage('Season must be a valid ID')
+    body('unit').optional({ nullable: true })
 ], async (req, res) => {
-    // Log the received season for debugging
-    console.log('[EXPENSE POST] Received season:', req.body.season);
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ errors: errors.array() });
         }
 
-        // Validate season exists and is not closed
-        const Season = require('../models/Season');
-        const season = await Season.findById(req.body.season);
-        if (!season) {
-            return res.status(400).json({ message: 'Season not found' });
-        }
-        if (season.isClosed) {
-            return res.status(400).json({ message: 'Cannot add expense to a closed season' });
-        }
 
         // Ensure date is in correct format
         const date = new Date(req.body.date);
@@ -541,8 +520,6 @@ router.put('/:id', [
     }),
     body('unit').optional({ nullable: true })
 ], async (req, res) => {
-    // Log the received season for debugging
-    console.log('[EXPENSE PUT] Received season:', req.body.season);
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {

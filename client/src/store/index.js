@@ -7,7 +7,6 @@ import custodyPaymentReducer from './slices/custodyPaymentSlice';
 import kundaRentalReducer from './slices/kundaRentalSlice';
 import kundaPaymentReducer from './slices/kundaPaymentSlice';
 import custodyIncomeReducer from './slices/custodyIncomeSlice';
-import seasonReducer from './slices/seasonSlice';
 
 export const store = configureStore({
   reducer: {
@@ -19,10 +18,9 @@ export const store = configureStore({
     kundaRental: kundaRentalReducer,
     kundaPayment: kundaPaymentReducer,
     custodyIncome: custodyIncomeReducer,
-    season: seasonReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: false,
     }),
-}); 
+});

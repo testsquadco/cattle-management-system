@@ -22,7 +22,7 @@ import { createCattle, updateCattle } from '../../store/slices/cattleSlice';
 import { DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { fetchSeasons } from '../../store/slices/seasonSlice';
+
 
 const theme = createTheme({
   palette: {
@@ -150,22 +150,11 @@ const initialFormState = {
 
 const CattleForm = ({ open, onClose, cattle = null }) => {
   const dispatch = useDispatch();
-  const { seasons, loading } = useSelector((state) => state.season);
-  const activeSeasons = seasons.filter(s => !s.isClosed);
-  const selectedSeason = React.useMemo(() => {
-    if (!seasons || seasons.length === 0) return null;
-    const active = seasons.find(s => !s.isClosed);
-    if (active) return active;
-    return seasons[0];
-  }, [seasons]);
-  const [formData, setFormData] = useState({ ...initialFormState, season: '' });
+  const [formData, setFormData] = useState({ ...initialFormState });
   const [imagePreview, setImagePreview] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isReadOnly = selectedSeason && selectedSeason.isClosed;
-
   useEffect(() => {
-    dispatch(fetchSeasons());
     if (cattle) {
       setFormData({
         ...cattle,
@@ -181,20 +170,10 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
       setFormData(initialFormState);
       setImagePreview(null);
     }
-  }, [dispatch, cattle, open]);
-
-  useEffect(() => {
-    if (activeSeasons.length === 1 && !formData.season) {
-      setFormData(prev => ({ ...prev, season: activeSeasons[0]._id }));
-    }
-  }, [activeSeasons, formData.season]);
+  }, [cattle, open]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'season') {
-      setFormData(prev => ({ ...prev, season: value }));
-      return;
-    }
     if (name.startsWith('custody.')) {
       const field = name.split('.')[1];
       setFormData((prev) => ({
@@ -273,11 +252,6 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isReadOnly) return;
-    if (!formData.season) {
-      alert('Please select a season.');
-      return;
-    }
     try {
       setIsSubmitting(true);
       
@@ -290,7 +264,6 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
       // Add other form fields
       const payload = { 
         ...formData,
-        season: formData.season,
         // Ensure required fields are included with fallback to existing values
         purchaseDate: formData.purchaseDate || cattle?.purchaseDate,
         weight: formData.weight || cattle?.weight,
@@ -376,11 +349,6 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
           }}
         >
           <DialogTitle sx={{ color: '#000' }}>{cattle ? 'Edit Cattle' : 'Add New Cattle'}</DialogTitle>
-          {isReadOnly && (
-            <Box sx={{ mb: 2, p: 2, bgcolor: '#f8d7da', color: '#721c24', borderRadius: 1, textAlign: 'center' }}>
-              This season is closed. Data is read-only.
-            </Box>
-          )}
           <form onSubmit={handleSubmit} data-testid="cattle-form">
             <DialogContent>
               <Grid container spacing={3}>
@@ -435,7 +403,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     value={formData.tag}
                     onChange={handleChange}
                     fullWidth
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -445,7 +413,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     value={formData.name}
                     onChange={handleChange}
                     fullWidth
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -457,7 +425,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                       onChange={handleChange}
                       label="Purpose"
                       data-testid="purpose-select"
-                      disabled={isReadOnly}
+                      disabled={false}
                     >
                       {PURPOSES.map((purpose) => (
                         <MenuItem key={purpose.value} value={purpose.value}>
@@ -476,7 +444,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                       onChange={handleChange}
                       label="Breed"
                       data-testid="breed-select"
-                      disabled={isReadOnly}
+                      disabled={false}
                     >
                       {BREEDS.map((breed) => (
                         <MenuItem key={breed} value={breed}>
@@ -495,7 +463,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                       onChange={handleChange}
                       label="Gender"
                       data-testid="gender-select"
-                      disabled={isReadOnly}
+                      disabled={false}
                     >
                       {GENDERS.map((gender) => (
                         <MenuItem key={gender.value} value={gender.value}>
@@ -512,7 +480,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     value={formData.colorMarkings}
                     onChange={handleChange}
                     fullWidth
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -521,7 +489,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     value={formData.purchaseDate ? new Date(formData.purchaseDate) : null}
                     onChange={(date) => handleDateChange('purchaseDate', date)}
                     slotProps={{ textField: { fullWidth: true } }}
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -535,7 +503,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     InputProps={{
                       endAdornment: <InputAdornment position="end">kg</InputAdornment>,
                     }}
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -549,7 +517,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start">PKR</InputAdornment>,
                     }}
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -563,7 +531,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start">PKR</InputAdornment>,
                     }}
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
                 {formData.purpose !== 'Breeding' && (
@@ -580,7 +548,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                           startAdornment: <InputAdornment position="start">PKR</InputAdornment>,
                           inputProps: { min: 0 },
                         }}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -594,7 +562,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         InputProps={{
                           startAdornment: <InputAdornment position="start">PKR</InputAdornment>,
                         }}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -603,7 +571,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         value={formData.saleDate ? new Date(formData.saleDate) : null}
                         onChange={(date) => handleDateChange('saleDate', date)}
                         slotProps={{ textField: { fullWidth: true } }}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                   </>
@@ -616,7 +584,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                       value={formData.custodyType}
                       onChange={handleChange}
                       label="Custody Type"
-                      disabled={isReadOnly}
+                      disabled={false}
                     >
                       <MenuItem value="Owned">Owned</MenuItem>
                       <MenuItem value="Custody">In Custody</MenuItem>
@@ -634,7 +602,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         value={formData.custodyDetails.ownerName}
                         onChange={handleChange}
                         fullWidth
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -644,7 +612,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         value={formData.custodyDetails.ownerContact}
                         onChange={handleChange}
                         fullWidth
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -659,7 +627,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                           startAdornment: <InputAdornment position="start">PKR</InputAdornment>,
                           inputProps: { min: 0 },
                         }}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -668,7 +636,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         value={formData.custodyDetails.startDate ? new Date(formData.custodyDetails.startDate) : null}
                         onChange={(date) => handleDateChange('custody.startDate', date)}
                         slotProps={{ textField: { fullWidth: true } }}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -677,7 +645,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         value={formData.custodyDetails.endDate ? new Date(formData.custodyDetails.endDate) : null}
                         onChange={(date) => handleDateChange('custody.endDate', date)}
                         slotProps={{ textField: { fullWidth: true } }}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -689,7 +657,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         fullWidth
                         multiline
                         rows={3}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                   </>
@@ -711,7 +679,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                           onChange={handleChange}
                           label="Breeding Role"
                           data-testid="breeding-role-select"
-                          disabled={isReadOnly}
+                          disabled={false}
                         >
                           <MenuItem value="Dam">Dam</MenuItem>
                           <MenuItem value="Sire">Sire</MenuItem>
@@ -727,7 +695,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                           onChange={handleChange}
                           label="Mating Method"
                           data-testid="mating-method-select"
-                          disabled={isReadOnly}
+                          disabled={false}
                         >
                           <MenuItem value="Natural">Natural</MenuItem>
                           <MenuItem value="AI">AI</MenuItem>
@@ -743,7 +711,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                           onChange={handleChange}
                           label="Pregnancy Status"
                           data-testid="pregnancy-status-select"
-                          disabled={isReadOnly}
+                          disabled={false}
                         >
                           <MenuItem value="true">Pregnant</MenuItem>
                           <MenuItem value="false">Not Pregnant</MenuItem>
@@ -759,7 +727,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                             value={formData.breedingDetails.breedingStartDate ? new Date(formData.breedingDetails.breedingStartDate) : null}
                             onChange={(date) => handleDateChange('breedingDetails.breedingStartDate', date)}
                             slotProps={{ textField: { fullWidth: true } }}
-                            disabled={isReadOnly}
+                            disabled={false}
                           />
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -768,7 +736,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                             value={formData.breedingDetails.lastHeatDate ? new Date(formData.breedingDetails.lastHeatDate) : null}
                             onChange={(date) => handleDateChange('breedingDetails.lastHeatDate', date)}
                             slotProps={{ textField: { fullWidth: true } }}
-                            disabled={isReadOnly}
+                            disabled={false}
                           />
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -777,7 +745,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                             value={formData.breedingDetails.expectedHeatDate ? new Date(formData.breedingDetails.expectedHeatDate) : null}
                             onChange={(date) => handleDateChange('breedingDetails.expectedHeatDate', date)}
                             slotProps={{ textField: { fullWidth: true } }}
-                            disabled={isReadOnly}
+                            disabled={false}
                           />
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -786,7 +754,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                             value={formData.breedingDetails.lastMatingDate ? new Date(formData.breedingDetails.lastMatingDate) : null}
                             onChange={(date) => handleDateChange('breedingDetails.lastMatingDate', date)}
                             slotProps={{ textField: { fullWidth: true } }}
-                            disabled={isReadOnly}
+                            disabled={false}
                           />
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -795,7 +763,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                             value={formData.breedingDetails.expectedDeliveryDate ? new Date(formData.breedingDetails.expectedDeliveryDate) : null}
                             onChange={(date) => handleDateChange('breedingDetails.expectedDeliveryDate', date)}
                             slotProps={{ textField: { fullWidth: true } }}
-                            disabled={isReadOnly}
+                            disabled={false}
                           />
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -808,7 +776,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                             fullWidth
                             InputProps={{
                               inputProps: { min: 0 },
-                              disabled: isReadOnly
+                              disabled: false
                             }}
                           />
                         </Grid>
@@ -823,7 +791,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                         fullWidth
                         multiline
                         rows={3}
-                        disabled={isReadOnly}
+                        disabled={false}
                       />
                     </Grid>
                   </>
@@ -838,28 +806,10 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                     fullWidth
                     multiline
                     rows={3}
-                    disabled={isReadOnly}
+                    disabled={false}
                   />
                 </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth required margin="normal">
-                    <InputLabel id="season-label">Season</InputLabel>
-                    <Select
-                      labelId="season-label"
-                      name="season"
-                      value={formData.season}
-                      onChange={handleChange}
-                      label="Season"
-                      disabled={isReadOnly}
-                    >
-                      {activeSeasons.map(season => (
-                        <MenuItem key={season._id} value={season._id}>
-                          {season.name} ({new Date(season.startDate).toLocaleDateString()} - {new Date(season.endDate).toLocaleDateString()})
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
+
               </Grid>
             </DialogContent>
             <DialogActions>
@@ -869,7 +819,7 @@ const CattleForm = ({ open, onClose, cattle = null }) => {
                 variant="contained" 
                 color="primary" 
                 data-testid="submit-button"
-                disabled={isSubmitting || isReadOnly}
+                disabled={isSubmitting}
               >
                 {isSubmitting ? 'Saving...' : (cattle ? 'Update' : 'Add')} Cattle
               </Button>

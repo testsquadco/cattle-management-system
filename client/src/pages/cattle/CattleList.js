@@ -41,7 +41,6 @@ import {
 } from '../../store/slices/cattleSlice';
 import CattleForm from './CattleForm';
 import './CattleList.css';
-import { fetchSeasons } from '../../store/slices/seasonSlice';
 
 const BREEDS = [
   'Holstein Friesian',
@@ -86,25 +85,13 @@ const CattleList = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { cattle, loading, error } = useSelector((state) => state.cattle);
-  const { seasons, loading: seasonsLoading } = useSelector((state) => state.season);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedCattle, setSelectedCattle] = useState(null);
 
   useEffect(() => {
     dispatch(fetchCattle());
-    dispatch(fetchSeasons());
   }, [dispatch]);
-
-  // Determine selected season and read-only status (same logic as CattleForm)
-  const activeSeasons = seasons.filter(s => !s.isClosed);
-  const selectedSeason = React.useMemo(() => {
-    if (!seasons || seasons.length === 0) return null;
-    const active = seasons.find(s => !s.isClosed);
-    if (active) return active;
-    return seasons[0];
-  }, [seasons]);
-  const isReadOnly = selectedSeason && selectedSeason.isClosed;
 
   const handleAdd = () => {
     setSelectedCattle(null);
@@ -262,13 +249,13 @@ const CattleList = () => {
         <Typography variant="h4" component="h1">
           Cattle Management
         </Typography>
-        <Tooltip title={isReadOnly ? 'This season is closed. Data is read-only.' : ''}>
+        <Tooltip title="">
           <span>
             <Button
               variant="contained"
               startIcon={<AddIcon />}
               onClick={handleAdd}
-              disabled={loading || isReadOnly}
+              disabled={loading}
             >
               Add Cattle
             </Button>

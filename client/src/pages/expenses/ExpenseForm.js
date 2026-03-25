@@ -23,7 +23,6 @@ import { createExpense, updateExpense } from '../../store/slices/expenseSlice';
 import { fetchCategories } from '../../store/slices/categorySlice';
 import { fetchCattle } from '../../store/slices/cattleSlice';
 import { parseISO, format } from 'date-fns';
-import { fetchSeasons } from '../../store/slices/seasonSlice';
 
 const ALL_CATTLE = 'all';
 const NONE_CATTLE = 'none';
@@ -37,14 +36,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
   const dispatch = useDispatch();
   const { categories } = useSelector((state) => state.category);
   const { cattle } = useSelector((state) => state.cattle);
-  const { seasons, loading } = useSelector((state) => state.season);
-  const activeSeasons = seasons.filter(s => !s.isClosed);
-  const selectedSeason = React.useMemo(() => {
-    if (!seasons || seasons.length === 0) return null;
-    const active = seasons.find(s => !s.isClosed);
-    if (active) return active;
-    return seasons[0];
-  }, [seasons]);
 
   const [formData, setFormData] = useState({
     date: new Date(),
@@ -56,13 +47,11 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
     quantity: '',
     unit: '',
     contributor: 'Eliya',
-    season: '',
   });
 
   useEffect(() => {
     dispatch(fetchCategories());
     dispatch(fetchCattle());
-    dispatch(fetchSeasons());
   }, [dispatch]);
 
   // Initialize form data only once when the component mounts or when expense changes
@@ -82,20 +71,9 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
         quantity: expense.quantity || '',
         unit: expense.unit || '',
         contributor: expense.contributor || 'Eliya',
-        season: expense.season?._id || '',
       });
     }
   }, [expense]);
-
-  // Set initial season when opening the form for a new expense
-  useEffect(() => {
-    if (!expense && open && activeSeasons.length > 0 && !formData.season) {
-      setFormData(prev => ({
-        ...prev,
-        season: activeSeasons[0]._id
-      }));
-    }
-  }, [open, activeSeasons, expense, formData.season]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -129,15 +107,8 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
     }
   };
 
-  const isReadOnly = selectedSeason && selectedSeason.isClosed;
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isReadOnly) return;
-    if (!formData.season) {
-      alert('Please select a season.');
-      return;
-    }
 
     try {
       const validDate = formData.date instanceof Date && !isNaN(formData.date) 
@@ -203,17 +174,9 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
   // Check if quantity field should be shown
   const showQuantityFields = selectedCategory && QUANTITY_REQUIRED_CATEGORIES.includes(selectedCategory.name);
 
-  console.log('Selected Category:', selectedCategory);
-  console.log('Show Quantity Fields:', showQuantityFields);
-
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>{expense ? 'Edit Expense' : 'Add New Expense'}</DialogTitle>
-      {isReadOnly && (
-        <Box sx={{ mb: 2, p: 2, bgcolor: '#f8d7da', color: '#721c24', borderRadius: 1, textAlign: 'center' }}>
-          This season is closed. Data is read-only.
-        </Box>
-      )}
       <form onSubmit={handleSubmit}>
         <DialogContent>
           <Grid container spacing={2}>
@@ -222,7 +185,7 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                 label="Date"
                 value={formData.date}
                 onChange={handleDateChange}
-                renderInput={(params) => <TextField {...params} fullWidth disabled={isReadOnly} />}
+                renderInput={(params) => <TextField {...params} fullWidth />}
               />
             </Grid>
             <Grid item xs={12}>
@@ -234,7 +197,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                   onChange={handleChange}
                   label="Category *"
                   required
-                  disabled={isReadOnly}
                 >
                   {categories.map((category) => (
                     <MenuItem key={category._id} value={category._id}>
@@ -253,7 +215,7 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                     value={formData.subCategory}
                     onChange={handleChange}
                     label="Subcategory"
-                    disabled={isReadOnly || !formData.category}
+                    disabled={!formData.category}
                   >
                     {availableSubcategories.map((subcategory) => (
                       <MenuItem key={subcategory} value={subcategory}>
@@ -275,7 +237,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                     onChange={handleChange}
                     fullWidth
                     required
-                    disabled={isReadOnly}
                     InputProps={{
                       inputProps: { min: 0, step: "0.01" }
                     }}
@@ -289,7 +250,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                       value={formData.unit}
                       onChange={handleChange}
                       label="Unit"
-                      disabled={isReadOnly}
                     >
                       {selectedCategory && UNIT_OPTIONS[selectedCategory.name]?.map((unit) => (
                         <MenuItem key={unit} value={unit}>
@@ -326,7 +286,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                           </Box>
                         )
                   }
-                  disabled={isReadOnly}
                 >
                   <MenuItem value={NONE_CATTLE} disabled={formData.cattle.length === 0}>
                     <em>None</em>
@@ -363,7 +322,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                 onChange={handleChange}
                 fullWidth
                 required
-                disabled={isReadOnly}
                 InputProps={{
                   startAdornment: 'PKR ',
                   inputProps: { min: 0 },
@@ -384,7 +342,6 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                 fullWidth
                 multiline
                 rows={4}
-                disabled={isReadOnly}
               />
             </Grid>
             <Grid item xs={12}>
@@ -395,29 +352,9 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
                   value={formData.contributor}
                   onChange={handleChange}
                   label="Contributor *"
-                  disabled={isReadOnly}
                 >
                   <MenuItem value="Eliya">Eliya</MenuItem>
                   <MenuItem value="Kumail">Kumail</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth required margin="normal">
-                <InputLabel id="season-label">Season</InputLabel>
-                <Select
-                  labelId="season-label"
-                  name="season"
-                  value={formData.season}
-                  onChange={handleChange}
-                  label="Season"
-                  disabled={isReadOnly}
-                >
-                  {activeSeasons.map(season => (
-                    <MenuItem key={season._id} value={season._id}>
-                      {season.name} ({new Date(season.startDate).toLocaleDateString()} - {new Date(season.endDate).toLocaleDateString()})
-                    </MenuItem>
-                  ))}
                 </Select>
               </FormControl>
             </Grid>
@@ -425,7 +362,7 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>Cancel</Button>
-          <Button type="submit" variant="contained" color="primary" disabled={isReadOnly}>
+          <Button type="submit" variant="contained" color="primary">
             {expense ? 'Update' : 'Add'}
           </Button>
         </DialogActions>
@@ -434,4 +371,4 @@ const ExpenseForm = ({ open, handleClose, expense = null }) => {
   );
 };
 
-export default ExpenseForm; 
+export default ExpenseForm;

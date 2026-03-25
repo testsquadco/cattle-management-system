@@ -32,8 +32,6 @@ import DailyFeedLogs from './pages/feed/DailyFeedLogs';
 import MonthlySummary from './pages/feed/MonthlySummary';
 import FeedTemplates from './pages/feed/FeedTemplates';
 import Analytics from './pages/feed/Analytics';
-import { fetchSeasons } from './store/slices/seasonSlice';
-import SeasonManagement from './pages/season-management';
 
 // Create theme
 const theme = createTheme({
@@ -102,7 +100,6 @@ const App = () => {
   useEffect(() => {
     if (token) {
       dispatch(fetchUserProfile());
-      dispatch(fetchSeasons());
     }
   }, [dispatch, token]);
 
@@ -152,7 +149,6 @@ const App = () => {
                 <Route path="templates" element={<FeedTemplates />} />
                 <Route path="analytics" element={<Analytics />} />
               </Route>
-              <Route path="season-management" element={<SeasonManagement />} />
             </Route>
 
             {/* Catch all route */}

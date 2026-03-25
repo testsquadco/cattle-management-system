@@ -38,7 +38,6 @@ import { fetchCattle } from '../store/slices/cattleSlice';
 import { fetchCurrentMonthStatus as fetchKundaStatus } from '../store/slices/kundaRentalSlice';
 import { fetchCurrentMonthStatus as fetchCustodyStatus } from '../store/slices/custodyIncomeSlice';
 import { formatCurrency } from '../utils/format';
-import SeasonFilter from '../components/SeasonFilter';
 
 const SummaryCard = ({ title, value, icon, color = 'primary.main', loading }) => (
   <Card sx={{ height: '100%', boxShadow: 2, opacity: loading ? 0.5 : 1 }}>
@@ -77,25 +76,23 @@ const Dashboard = () => {
   const { summary, loading: expenseLoading } = useSelector((state) => state.expense);
   const { currentMonthStatus: kundaStatus, loading: kundaLoading } = useSelector((state) => state.kundaRental || {});
   const { currentMonthStatus: custodyStatus, loading: custodyLoading } = useSelector((state) => state.custodyIncome || {});
-  const { selectedSeason } = useSelector((state) => state.season);
 
   useEffect(() => {
-    if (!selectedSeason) return;
     const fetchData = async () => {
       try {
         await Promise.all([
-          dispatch(fetchCattle({ season: selectedSeason })),
+          dispatch(fetchCattle()),
           dispatch(fetchCategories()),
-          dispatch(fetchExpenseSummary({ season: selectedSeason })),
-          dispatch(fetchKundaStatus({ season: selectedSeason })),
-          dispatch(fetchCustodyStatus({ season: selectedSeason })),
+          dispatch(fetchExpenseSummary()),
+          dispatch(fetchKundaStatus()),
+          dispatch(fetchCustodyStatus()),
         ]);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       }
     };
     fetchData();
-  }, [dispatch, selectedSeason]);
+  }, [dispatch]);
 
   useEffect(() => {
     console.log('Dashboard state:', {
@@ -131,9 +128,6 @@ const Dashboard = () => {
   return (
     <Container maxWidth={false}>
       <Box sx={{ pt: 3 }}>
-        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <SeasonFilter />
-        </Box>
         <Typography variant="h4" gutterBottom>
           Expenses Overview
         </Typography>

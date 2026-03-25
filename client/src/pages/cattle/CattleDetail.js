@@ -67,7 +67,6 @@ const CattleDetail = () => {
   const navigate = useNavigate();
   const { selectedCattle, loading: cattleLoading, error: cattleError } = useSelector((state) => state.cattle);
   const { expenses, loading: expensesLoading, error: expensesError } = useSelector((state) => state.expense);
-  const { seasons } = useSelector((state) => state.season);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [latestWeight, setLatestWeight] = useState(null);
@@ -150,7 +149,7 @@ const CattleDetail = () => {
     return selectedCattle?.weight || 0;
   };
 
-  const carriedFromSeason = selectedCattle?.carryForwardFromSeason && seasons?.find(s => s._id === selectedCattle.carryForwardFromSeason);
+
 
   if (cattleLoading || expensesLoading) {
     return (
@@ -190,11 +189,6 @@ const CattleDetail = () => {
         <Typography variant="h5" gutterBottom>
           Cattle Details - {selectedCattle.tag} ({selectedCattle.breed})
         </Typography>
-        {carriedFromSeason && (
-          <Box sx={{ mb: 2, p: 2, bgcolor: '#e3f2fd', color: '#1565c0', borderRadius: 1, textAlign: 'center' }}>
-            This cattle was carried forward from season: <b>{carriedFromSeason.name}</b>
-          </Box>
-        )}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
           <Button startIcon={<ArrowBackIcon />} onClick={handleBack}>
             Back to Cattle List
